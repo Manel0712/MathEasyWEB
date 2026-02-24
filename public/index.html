@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Juego Matemático</title>
+
+<style>
+:root{
+    --fons:#32A0CE;
+    --fons-central:#1E607C;
+}
+
+body{
+    font-family:Arial;
+    background-color:var(--fons);
+    color:white;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    flex-direction:column;
+    min-height:100vh;
+    margin:0;
+}
+
+.game-container{text-align:center;}
+
+.game-code{
+    font-size:48px;
+    font-weight:bold;
+    background-color:var(--fons-central);
+    padding:15px 30px;
+    border-radius:12px;
+    margin-bottom:20px;
+    letter-spacing:6px;
+}
+
+.operation{
+    font-size:48px;
+    font-weight:bold;
+    margin-bottom:20px;
+}
+
+.timer{
+    font-size:32px;
+    margin-bottom:20px;
+    display:none;
+}
+
+.start-btn, .next-btn{
+    padding:12px 25px;
+    font-size:18px;
+    border:none;
+    border-radius:12px;
+    background-color:var(--fons-central);
+    color:white;
+    cursor:pointer;
+    margin:10px;
+}
+
+.next-btn{
+    display:none;
+}
+
+/* =================== Jugadores =================== */
+.players{
+    display:flex;
+    flex-wrap:wrap;
+    justify-content:center;
+    gap:15px;
+    max-width:800px;
+    margin-top:25px;
+}
+
+.player{
+    background-color:rgba(255,255,255,0.15);
+    padding:15px;
+    border-radius:15px;
+    min-width:120px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    font-size:18px;
+}
+
+.player img{
+    width:60px;
+    height:60px;
+    border-radius:50%;
+    border:3px solid white;
+    margin-bottom:8px;
+}
+
+/* =================== Podio Kahoot =================== */
+.podium {
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+    gap: 30px;
+    margin-top: 70px;
+}
+
+/* Caja común */
+.podium-place {
+    width: 170px;
+    border-radius: 20px;
+    text-align: center;
+    padding: 15px;
+    font-weight: bold;
+    box-shadow: 0px 8px 18px rgba(0,0,0,0.35);
+    position: relative;
+    opacity: 0;
+    transform: translateY(60px);
+}
+
+/* Avatar */
+.podium-place img {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    border: 4px solid white;
+    margin-bottom: 12px;
+}
+
+/* Número ranking */
+.podium-rank {
+    position: absolute;
+    top: -25px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: white;
+    color: black;
+    font-size: 26px;
+    font-weight: bold;
+    width: 55px;
+    height: 55px;
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+/* Plataformas */
+.first-place {
+    height: 270px;
+    background: linear-gradient(to top, #FFD700, #FFB800);
+    font-size: 22px;
+}
+
+.second-place {
+    height: 220px;
+    background: linear-gradient(to top, #C0C0C0, #B0B0B0);
+    font-size: 20px;
+}
+
+.third-place {
+    height: 200px;
+    background: linear-gradient(to top, #CD7F32, #B36B2C);
+    font-size: 19px;
+}
+
+/* Animación */
+.show {
+    animation: rise 0.8s ease forwards;
+}
+
+@keyframes rise {
+    from {
+        opacity: 0;
+        transform: translateY(80px) scale(0.8);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0px) scale(1);
+    }
+}
+</style>
+</head>
+
+<body>
+
+<div class="game-container">
+
+    <!-- Código partida -->
+    <div class="game-code" id="gameCode">----</div>
+
+    <!-- Operación -->
+    <div class="operation" id="operation">Esperant jugadors...</div>
+
+    <!-- Timer -->
+    <div class="timer" id="timer">00</div>
+
+    <!-- Botones -->
+    <button class="start-btn" id="startBtn">Iniciar Joc</button>
+    <button class="next-btn" id="nextBtn">Següent Operació</button>
+
+    <!-- Jugadores -->
+    <div class="players" id="players"></div>
+
+    <!-- Podio -->
+    <div class="podium" id="podium"></div>
+
+</div>
+
+<!-- Confetti -->
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+<!-- Socket.io -->
+<script src="/socket.io/socket.io.js"></script>
+
+<script>
+const socket = io();
+const gameCodeDiv = document.getElementById("gameCode");
+const operationDiv = document.getElementById("operation");
+const timerDiv = document.getElementById("timer");
+const startBtn = document.getElementById("startBtn");
+const nextBtn = document.getElementById("nextBtn");
+const playersContainer = document.getElementById("players");
+const podiumDiv = document.getElementById("podium");
+
+let currentGameCode = null;
+
+// =================== Obtener código de partida ===================
+window.onload = async () => {
+    const res = await fetch("/game-code");
+    const data = await res.json();
+    currentGameCode = data.code;
+    gameCodeDiv.textContent = currentGameCode;
+
+    // =================== OBSERVAR PARTIDA ===================
+    socket.emit("observe-game", { code: currentGameCode });
+};
+
+// =================== Eventos ===================
+socket.on("update-players", participants => {
+    playersContainer.innerHTML = "";
+    participants.forEach(p => {
+        const div = document.createElement("div");
+        div.className = "player";
+        div.innerHTML = `<img src="${p.avatar}"><div>${p.name}</div>`;
+        playersContainer.appendChild(div);
+    });
+});
+
+socket.on("timer-start", data => {
+    operationDiv.textContent = data.operation;
+    timerDiv.textContent = data.remaining;
+    timerDiv.style.display = "block";
+    nextBtn.style.display = "none";
+});
+
+socket.on("timer-update", data => { timerDiv.textContent = data.remaining; });
+socket.on("operation-ended", () => { timerDiv.style.display = "none"; nextBtn.style.display = "inline-block"; });
+
+socket.on("show-podium", participants => {
+
+    playersContainer.style.display = "none";
+    operationDiv.style.display = "none";
+    timerDiv.style.display = "none";
+    startBtn.style.display = "none";
+    nextBtn.style.display = "none";
+
+    podiumDiv.innerHTML = "";
+
+    // Música victoria Kahoot
+    playKahootSound();
+
+    // Confetti 🎊
+    launchConfetti();
+
+    // 🥈 Segundo
+    if(participants[1]){
+        setTimeout(() => {
+            podiumDiv.innerHTML += `
+            <div class="podium-place second-place show">
+                <div class="podium-rank">2</div>
+                <img src="${participants[1].avatar}">
+                <div>${participants[1].name}</div>
+                <div>${participants[1].score} pts</div>
+            </div>`;
+        }, 400);
+    }
+
+    // 🥇 Primero
+    if(participants[0]){
+        setTimeout(() => {
+            podiumDiv.innerHTML += `
+            <div class="podium-place first-place show">
+                <div class="podium-rank">1</div>
+                <img src="${participants[0].avatar}">
+                <div>${participants[0].name}</div>
+                <div>${participants[0].score} pts</div>
+            </div>`;
+        }, 900);
+    }
+
+    // 🥉 Tercero
+    if(participants[2]){
+        setTimeout(() => {
+            podiumDiv.innerHTML += `
+            <div class="podium-place third-place show">
+                <div class="podium-rank">3</div>
+                <img src="${participants[2].avatar}">
+                <div>${participants[2].name}</div>
+                <div>${participants[2].score} pts</div>
+            </div>`;
+        }, 1400);
+    }
+});
+
+// =================== Botones ===================
+startBtn.addEventListener("click", () => {
+    if(!currentGameCode) return alert("Código no cargado");
+    socket.emit("start-game", currentGameCode);
+    startBtn.style.display = "none";
+});
+
+nextBtn.addEventListener("click", () => {
+    if(!currentGameCode) return;
+    socket.emit("next-operation", currentGameCode);
+    nextBtn.style.display = "none";
+});
+
+// =================== Confetti ===================
+function launchConfetti() {
+    const duration = 2000;
+    const end = Date.now() + duration;
+
+    (function frame() {
+        confetti({
+            particleCount: 8,
+            spread: 90,
+            origin: { y: 0.6 }
+        });
+
+        if (Date.now() < end) {
+            requestAnimationFrame(frame);
+        }
+    })();
+}
+
+function playKahootSound() {
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    const oscillator = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+
+    oscillator.type = "square"; // sonido tipo videojuego
+    oscillator.frequency.setValueAtTime(600, audioCtx.currentTime); // tono inicial
+
+    gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime); // volumen bajo
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+
+    oscillator.start();
+
+    // Cambiar tono como Kahoot 🎶
+    oscillator.frequency.exponentialRampToValueAtTime(
+        1200,
+        audioCtx.currentTime + 0.3
+    );
+
+    oscillator.stop(audioCtx.currentTime + 0.4);
+}
+
+// =================== Música operaciones ===================
+function playGameMusic(){
+    // aquí puedes añadir la música de juego si quieres
+}
+
+</script>
+
+</body>
+</html>
