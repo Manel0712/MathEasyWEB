@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tasques</title>
+
+<style>
+:root{
+    --fons:#32A0CE;
+    --fons-central:#1E607C;
+}
+
+body{
+    font-family:Arial;
+    margin:0;
+    background-color:var(--fons);
+}
+
+/* TOOLBAR */
+#toolbar{
+    background-color:var(--fons-central);
+    padding:10px 20px;
+    color:white;
+    display:flex;
+    align-items:center;
+}
+#toolbar a{
+    color:white;
+    text-decoration:none;
+    font-weight:bold;
+    display:flex;
+    align-items:center;
+    gap:3px;
+}
+#toolbar a:first-child{
+    margin-left:auto;
+}
+#toolbar a + a{
+    margin-left:18px;
+}
+#toolbar a:last-child{
+    margin-right:20px;
+}
+#toolbar svg{
+    width:20px;
+    height:20px;
+}
+
+/* CONTENIDO */
+.course-container{
+    max-width:1000px;
+    margin:40px auto;
+}
+.course-title{
+    font-size:32px;
+    font-weight:bold;
+    color:white;
+    margin-bottom:30px;
+    text-align:center;
+}
+
+/* TEMAS */
+.section{
+    background-color:var(--fons-central);
+    border-radius:12px;
+    padding:20px;
+    margin-bottom:25px;
+    color:white;
+}
+.section-header{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:15px;
+}
+.section-title{
+    font-size:22px;
+    font-weight:bold;
+}
+
+/* TAREAS */
+.tasks{
+    margin-bottom:15px;
+}
+.task{
+    background:rgba(255,255,255,0.15);
+    padding:10px;
+    border-radius:8px;
+    margin-bottom:8px;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+}
+.task-info{
+    display:flex;
+    flex-direction: column;
+}
+
+/* BOTONES */
+.btn{
+    padding:10px 20px;
+    border:none;
+    border-radius:12px;
+    background:white;
+    color:var(--fons-central);
+    cursor:pointer;
+    font-weight:bold;
+}
+.small-btn{
+    padding:5px 10px;
+    font-size:13px;
+    margin-left:5px;
+}
+.add-topic-container{
+    text-align:center;
+}
+.task-buttons{
+    display:flex;
+    gap:5px;
+}
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+<script type="module">
+import { Alumnes, Temes, crearTema, crearTasca, assignarTasca, obtenirAssignacions, eliminarAssignacio, assignarOperacio, qualificarTasca } from "./services/api.js";
+
+const topicsContainer = document.getElementById("topicsContainer");
+const addTopicBtn = document.getElementById("addTopicBtn");
+
+// ICONOS TOOLBAR
+document.getElementById("informesLink").insertAdjacentHTML('afterbegin', feather.icons['file-text'].toSvg());
+document.getElementById("tasquesLink").insertAdjacentHTML('afterbegin', feather.icons['check-square'].toSvg());
+
+// --- FUNCION PARA CARGAR TEMAS Y TAREAS ---
+function cargarTemas() {
+    Temes().then(temas => {
+        topicsContainer.innerHTML = "";
+
+        temas.forEach(tema => {
+            const section = document.createElement("div");
+            section.className = "section";
+            section.dataset.id = tema.id;
+
+            section.innerHTML = `
+                <div class="section-header">
+                    <div class="section-title">${tema.Nom}</div>
+                    <div>
+                        <button class="btn small-btn edit-topic">✏</button>
+                        <button class="btn small-btn delete-topic">🗑</button>
+                    </div>
+                </div>
+                <div class="tasks"></div>
+                <button class="btn add-task">+ Afegir tasca</button>
+            `;
+
+            const tasksContainer = section.querySelector(".tasks");
+
+            // Añadir tareas del tema
+            tema.tasques.forEach(tasca => {
+                const taskDiv = document.createElement("div");
+                taskDiv.className = "task";
+                taskDiv.dataset.id = tasca.id;
+
+                const taskInfoDiv = document.createElement("div");
+                taskInfoDiv.className = "task-info";
+
+                // Nos aseguramos de que operations siempre sea array
+                const opsArray = Array.isArray(tasca.operacions) ? tasca.operacions.map(op => op.Operacio) : [];
+
+                taskInfoDiv.innerHTML = `
+                    <strong>${tasca.Nom}</strong>
+                    <div style="font-size:14px;opacity:0.8;">
+                        ${tasca.Data_obertura || ''} - ${tasca.Data_tancament || ''}
+                    </div>
+                `;
+
+                // Mostrar número de operaciones
+                const opsDiv = document.createElement("div");
+                opsDiv.style.fontSize = "14px";
+                opsDiv.style.opacity = "0.8";
+                opsDiv.textContent = `${opsArray.length} operacions`; // siempre muestra 0 si no hay
+                taskInfoDiv.appendChild(opsDiv);
+
+                taskDiv.appendChild(taskInfoDiv);
+
+                // Guardar operaciones en dataset como array de strings
+                taskDiv.dataset.operacions = JSON.stringify(opsArray);
+
+                // Botones
+                const buttonsDiv = document.createElement("div");
+                buttonsDiv.className = "task-buttons";
+                buttonsDiv.innerHTML = `
+                    <button class="btn small-btn ops-task">Operacions</button>
+                    <button class="btn small-btn assign-task">Asignar</button>
+                    <button class="btn small-btn view-submissions">Trameses</button>
+                `;
+                taskDiv.appendChild(buttonsDiv);
+
+                tasksContainer.appendChild(taskDiv);
+            });
+            topicsContainer.appendChild(section);
+        });
+    }).catch(err => console.error(err));
+}
+
+// --- CREAR TEMA ---
+addTopicBtn.addEventListener("click", async () => {
+    const { value: title } = await Swal.fire({
+        title: "Nom del tema",
+        input: "text",
+        confirmButtonText: "Crear",
+        confirmButtonColor:"#32A0CE",
+        allowOutsideClick:false,
+        allowEscapeKey:false,
+        preConfirm: value => {
+            if(!value) Swal.showValidationMessage("Introdueix un nom de tema");
+            return value;
+        }
+    });
+
+    if(!title) return;
+
+    crearTema({ Nom: title }).then(tema => {
+        cargarTemas();
+        Swal.fire({
+            title:"Tema creat",
+            icon:"success",
+            confirmButtonColor: '#32A0CE',
+            allowOutsideClick:false,
+            allowEscapeKey:false,
+        });
+    });
+});
+
+// --- EVENTOS TEMAS Y TAREAS ---
+topicsContainer.addEventListener("click", async e => {
+    const section = e.target.closest(".section");
+    if(!section) return;
+
+    // ELIMINAR TEMA
+    if(e.target.classList.contains("delete-topic")){
+        const confirm = await Swal.fire({
+            title:"Eliminar tema?",
+            icon:"warning",
+            showCancelButton:true,
+            confirmButtonColor:"#32A0CE",
+            allowOutsideClick:false,
+            allowEscapeKey:false,
+        });
+        if(confirm.isConfirmed) section.remove();
+    }
+
+    // EDITAR TEMA
+    if(e.target.classList.contains("edit-topic")){
+        const titleDiv = section.querySelector(".section-title");
+        const { value:newTitle } = await Swal.fire({
+            title:"Editar tema",
+            input:"text",
+            inputValue:titleDiv.textContent,
+            confirmButtonColor:"#32A0CE",
+            allowOutsideClick:false,
+            allowEscapeKey:false
+        });
+        if(newTitle) titleDiv.textContent = newTitle;
+    }
+
+    // AÑADIR TAREA
+    if(e.target.classList.contains("add-task")){
+        const tema_id = section.dataset.id;
+        const { value: taskData } = await Swal.fire({
+            title:"Crear Tasca",
+            html:`
+                <input id="taskName" class="swal2-input" placeholder="Nom de la tasca">
+                <input type="date" id="startDate" class="swal2-input" placeholder="Data d'obertura">
+                <input type="date" id="endDate" class="swal2-input" placeholder="Data de tancament">
+            `,
+            confirmButtonText:"Següent",
+            confirmButtonColor:"#32A0CE",
+            allowOutsideClick:false,
+            allowEscapeKey:false,
+            preConfirm: () => {
+                const Nom = Swal.getPopup().querySelector("#taskName").value;
+                const Data_obertura = Swal.getPopup().querySelector("#startDate").value;
+                const Data_tancament = Swal.getPopup().querySelector("#endDate").value;
+                if(!Nom || !Data_obertura || !Data_tancament){
+                    Swal.showValidationMessage("Introdueix tots els camps");
+                    return false;
+                }
+                return { Nom, "Data_obertura": Data_obertura, "Data_tancament": Data_tancament, tema_id };
+            }
+        });
+
+        if(!taskData) return;
+
+        crearTasca(taskData).then(tasca => {
+
+            // No recargar aún todo el DOM
+            const tasksContainer = section.querySelector(".tasks");
+
+            // Crear taskDiv directamente
+            const taskDiv = document.createElement("div");
+            taskDiv.className = "task";
+            taskDiv.dataset.id = tasca.id;
+
+            const taskInfoDiv = document.createElement("div");
+            taskInfoDiv.className = "task-info";
+            taskInfoDiv.innerHTML = `
+                <strong>${tasca.Nom}</strong>
+                <div style="font-size:14px;opacity:0.8;">
+                    ${tasca.Data_obertura || ''} - ${tasca.Data_tancament || ''}
+                </div>
+            `;
+            tasksContainer.appendChild(taskDiv);
+            taskDiv.appendChild(taskInfoDiv);
+
+            // Inicializamos operaciones vacías
+            const opsArray = [];
+            taskDiv.dataset.operacions = JSON.stringify(opsArray);
+
+            const opsDiv = document.createElement("div");
+            opsDiv.style.fontSize = "14px";
+            opsDiv.style.opacity = "0.8";
+            opsDiv.textContent = `${opsArray.length} operacions`;
+            taskInfoDiv.appendChild(opsDiv);
+
+            // Botones
+            const buttonsDiv = document.createElement("div");
+            buttonsDiv.className = "task-buttons";
+            buttonsDiv.innerHTML = `
+                <button class="btn small-btn ops-task">Operacions</button>
+                <button class="btn small-btn assign-task">Asignar</button>
+            `;
+            taskDiv.appendChild(buttonsDiv);
+
+            // --- Modal de añadir operaciones ---
+            Swal.fire({
+                title:"Escriu les operacions",
+                html:`<div id="opsContainer"></div>
+                    <button type="button" id="addOpBtn" class="btn" style="margin-top:10px;">+ Afegir operació</button>`,
+                confirmButtonText:"Guardar operacions",
+                showCancelButton:true,
+                cancelButtonText:"Crear operacions més tard",
+                didOpen: () => {
+                    const container = Swal.getPopup().querySelector("#opsContainer");
+                    const addBtn = Swal.getPopup().querySelector("#addOpBtn");
+
+                    // --- Primero insertamos las operaciones existentes ---
+                    if (taskDiv.dataset.operacions) {
+                        const existingOps = JSON.parse(taskDiv.dataset.operacions);
+                        existingOps.forEach(op => {
+                            const input = document.createElement("input");
+                            input.type = "text";
+                            input.className = "swal2-input op-input";
+                            input.value = op;
+                            input.dataset.existing = "true"; // marcar como existente
+                            container.appendChild(input); // siempre arriba
+                        });
+                    }
+
+                    // --- Luego insertamos el input vacío para nuevas operaciones ---
+                    const newInput = document.createElement("input");
+                    newInput.type = "text";
+                    newInput.className = "swal2-input op-input";
+                    newInput.placeholder = "Ex: 5+3";
+                    container.appendChild(newInput); // siempre al final
+
+                    // --- Botón + para añadir más inputs debajo ---
+                    addBtn.addEventListener("click", () => {
+                        const input = document.createElement("input");
+                        input.type = "text";
+                        input.className = "swal2-input op-input";
+                        input.placeholder = "Ex: 8-4";
+                        container.appendChild(input); // nuevos siempre al final
+                    });
+                },
+                preConfirm: () => {
+                    const inputs = Swal.getPopup().querySelectorAll(".op-input");
+                    const vals = [];
+                    inputs.forEach(inp => {
+                        if(inp.value.trim() !== ""){
+                            vals.push({
+                                value: inp.value.trim(),
+                                existing: inp.dataset.existing === "true"
+                            });
+                        }
+                    });
+
+                    if(vals.length === 0){
+                        Swal.showValidationMessage("Introdueix almenys una operació");
+                        return false;
+                    }
+                    return vals;
+                }
+            }).then(result => {
+                if(result.isConfirmed){
+                    const novesOps = result.value;
+
+                    // Guardar cada operación
+                    const promeses = novesOps.map(op =>
+                        assignarOperacio({ Tasca: tasca.id, operacio: op })
+                    );
+
+                    Promise.all(promeses).then(() => {
+                        // Actualizar dataset y UI
+                        taskDiv.dataset.operacions = JSON.stringify(novesOps);
+                        opsDiv.textContent = `${novesOps.length} operacions`;
+                        Swal.fire({ title:"Operacions guardades", icon:"success", confirmButtonColor:"#32A0CE", allowOutsideClick:false, allowEscapeKey:false, });
+                    });
+                }
+            });
+
+        }).catch(err => console.error(err));
+    }
+
+    // BOTON OPERACIONES
+    if(e.target.classList.contains("ops-task")){
+        const taskDiv = e.target.closest(".task");
+
+        const { value: ops } = await Swal.fire({
+            title:"Afegir operacions",
+            html:`<div id="opsContainer"><button type="button" id="addOpBtn" class="btn" style="margin-top:10px;">+ Afegir operació</button></div>`,
+            confirmButtonText:"Guardar",
+            confirmButtonColor:"#32A0CE",
+            allowOutsideClick:false,
+            allowEscapeKey:false,
+            didOpen: () => {
+                const container = Swal.getPopup().querySelector("#opsContainer");
+                const addBtn = Swal.getPopup().querySelector("#addOpBtn");
+
+                // --- Cargar operaciones existentes ---
+                if (taskDiv.dataset.operacions) {
+                    const existingOps = JSON.parse(taskDiv.dataset.operacions);
+                    existingOps.forEach(op => {
+                        const input = document.createElement("input");
+                        input.type = "text";
+                        input.className = "swal2-input op-input";
+                        input.value = op;
+                        input.dataset.existing = "true"; // marcar como existente
+                        container.insertBefore(input, addBtn); // siempre antes del botón
+                    });
+                } else {
+                    // --- Si no hay operaciones, agregar un input vacío antes del botón ---
+                    const input = document.createElement("input");
+                    input.type = "text";
+                    input.className = "swal2-input op-input";
+                    input.placeholder = "Ex: 5+3";
+                    container.insertBefore(input, addBtn); // antes del botón
+                }
+
+                // --- Botón + para añadir más inputs ---
+                addBtn.addEventListener("click", () => {
+                    const input = document.createElement("input");
+                    input.type = "text";
+                    input.className = "swal2-input op-input";
+                    input.placeholder = "Ex: 8-4";
+                    container.insertBefore(input, addBtn); // cada nuevo input antes del botón
+                });
+            },
+            preConfirm: () => {
+                const inputs = Swal.getPopup().querySelectorAll(".op-input");
+                let vals = [];
+                inputs.forEach(inp => {
+                    if(inp.value.trim() !== ""){
+                        vals.push({
+                            value: inp.value.trim(),
+                            existing: inp.dataset.existing === "true"
+                        });
+                    }
+                });
+                if(vals.length === 0){
+                    Swal.showValidationMessage("Introdueix almenys una operació");
+                    return false;
+                }
+                return vals;
+            }
+        });
+
+        if(ops){
+            const novesOps = ops.filter(op => !op.existing);
+            if(novesOps.length > 0){
+                const promeses = novesOps.map(op =>
+                    assignarOperacio({
+                        Tasca: taskDiv.dataset.id,
+                        operacio: op.value
+                    })
+                );
+
+                Promise.all(promeses)
+                .then(() => {
+                    // Actualizamos el dataset con todas las operaciones
+                    const totesOps = [...(taskDiv.dataset.operacions ? JSON.parse(taskDiv.dataset.operacions) : []), ...novesOps.map(op => op.value)];
+                    taskDiv.dataset.operacions = JSON.stringify(totesOps);
+
+                    // Actualizar UI
+                    const infoDiv = taskDiv.querySelector(".task-info");
+                    const opsDiv = infoDiv.querySelector("div:last-child");
+                    opsDiv.textContent = `${totesOps.length} operacions`;
+
+                    Swal.fire({
+                        title:"Operacions guardades",
+                        icon:"success",
+                        confirmButtonColor:"#32A0CE",
+                        allowOutsideClick:false,
+                        allowEscapeKey:false,
+                    });
+                })
+                .catch(err => console.error(err));
+            }
+        }
+    }
+
+    // ASIGNAR TAREA
+    if(e.target.classList.contains("assign-task")){
+        const taskDiv = e.target.closest(".task");
+        const tasca_id = taskDiv.dataset.id;
+
+        Alumnes().then(alumnos => {
+            if(alumnos.length === 0){
+                Swal.fire({
+                    title: "Avis",
+                    text: "No hi ha alumnes disponibles",
+                    icon: "info",
+                    confirmButtonColor:"#32A0CE",
+                    allowOutsideClick:false,
+                    allowEscapeKey:false,
+                });
+                return;
+            }
+
+            obtenirAssignacions(tasca_id).then(assignacions => {
+                const assignedIds = assignacions.map(a => a.Alumne);
+
+                // Crear checkboxes
+                const checkboxes = alumnos.map((alumno,i) => `
+                    <div style="text-align:left; margin:3px; display:flex; align-items:center; gap:5px;">
+                        ${alumno.ProfilePicturePath ? `<img src="http://127.0.0.1:8000/storage/${alumno.ProfilePicturePath}" style="width:30px;height:30px;border-radius:50%;">` : ''}
+                        <input type="checkbox" id="alumno${i}" value="${alumno.id}" ${assignedIds.includes(alumno.id) ? 'checked' : ''}>
+                        <label for="alumno${i}">${alumno.Nom} ${alumno.Cognoms}</label>
+                    </div>
+                `).join("");
+
+                Swal.fire({
+                    title:"Assigna la tasca",
+                    html:`<div style="max-height:300px; overflow-y:auto;">${checkboxes}</div>`,
+                    confirmButtonText:"Guardar",
+                    confirmButtonColor:"#32A0CE",
+                    allowOutsideClick:false,
+                    allowEscapeKey:false,
+                    preConfirm: () => {
+                        const selectedAlumnos = [];
+                        alumnos.forEach((alumno,i)=>{
+                            const cb = Swal.getPopup().querySelector(`#alumno${i}`);
+                            if(cb.checked) selectedAlumnos.push(alumno.id);
+                        });
+                        if(selectedAlumnos.length === 0){
+                            Swal.showValidationMessage("Selecciona almenys un alumne");
+                            return false;
+                        }
+                        return selectedAlumnos;
+                    }
+                }).then(result => {
+                    if(result.isConfirmed){
+                        const alumnesSeleccionats = result.value;
+
+                        // 1️⃣ Asignar nuevos
+                        const alumnesNous = alumnesSeleccionats.filter(id => !assignedIds.includes(id));
+                        const promesesAssignar = alumnesNous.map(alumne_id => 
+                            assignarTasca({ Alumne: alumne_id, Tasca: tasca_id, Estat_tramesa: "No entregat" })
+                        );
+
+                        // 2️⃣ Eliminar desmarcados
+                        const alumnesEliminar = assignedIds.filter(id => !alumnesSeleccionats.includes(id));
+                        const promesesEliminar = alumnesEliminar.map(alumne_id => 
+                            eliminarAssignacio({ Alumne: alumne_id, Tasca: tasca_id })
+                        );
+
+                        // Ejecutar todo
+                        Promise.all([...promesesAssignar, ...promesesEliminar])
+                            .then(() => {
+                                cargarTemas();
+                                Swal.fire({
+                                    title:"Tasca actualitzada",
+                                    text:`Assignacions actualitzades`,
+                                    icon:"success",
+                                    confirmButtonColor:"#32A0CE",
+                                    allowOutsideClick:false,
+                                    allowEscapeKey:false,
+                                });
+                            })
+                            .catch(err => console.error(err));
+                    }
+                });
+
+            }).catch(err=>{
+                Swal.fire({
+                    title:"Error obtenint assignacions",
+                    text: err.message,
+                    icon:"error",
+                    confirmButtonColor:"#32A0CE",
+                    allowOutsideClick:false,
+                    allowEscapeKey:false,
+                });
+            });
+
+        }).catch(err=>{
+            Swal.fire({
+                title:"Error",
+                text: err.message,
+                icon:"error",
+                confirmButtonColor:"#32A0CE",
+                allowOutsideClick:false,
+                allowEscapeKey:false,
+            });
+        });
+    }
+
+    if(e.target.classList.contains("view-submissions")){
+        const taskDiv = e.target.closest(".task");
+        const tasca_id = taskDiv.dataset.id;
+
+        try {
+            const [assignacions, alumnes] = await Promise.all([
+                obtenirAssignacions(tasca_id),
+                Alumnes()
+            ]);
+
+            // Filtrar solo entregadas o calificadas
+            const entregades = assignacions.filter(a => a.Estat_tramesa === "Entregada" || a.Estat_tramesa === "Qualificada");
+
+            if(entregades.length === 0){
+                Swal.fire({
+                    title: "Sense entregues",
+                    text: "Cap alumne ha entregat aquesta tasca",
+                    icon: "info",
+                    confirmButtonColor:"#32A0CE",
+                    allowOutsideClick:false,
+                    allowEscapeKey:false,
+                });
+                return;
+            }
+
+            const html = entregades.map(a => {
+                const alumne = alumnes.find(al => al.id == a.Alumne);
+                const img = alumne?.ProfilePicturePath
+                    ? `<img src="http://127.0.0.1:8000/storage/${alumne.ProfilePicturePath}" 
+                        style="width:40px;height:40px;border-radius:50%;">`
+                    : '';
+                const nom = alumne ? `${alumne.Nom} ${alumne.Cognoms}` : "Alumne desconegut";
+
+                const nota = a.Qualificacio !== null ? `${a.Qualificacio}/10` : "No qualificada";
+
+                return `
+                    <div class="submission-card"
+                        data-tramesa-id="${a.id}"
+                        data-resultats='${JSON.stringify(a)}'
+                        style="display:flex; align-items:center; justify-content:space-between; 
+                            background:var(--fons); color:black; padding:10px; border-radius:10px; margin-bottom:10px; cursor:pointer;">
+                        
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            ${img}
+                            <div>
+                                <div>${nom}</div>
+                            </div>
+                        </div>
+
+                        <div style="font-weight:bold;">
+                            ${nota}
+                        </div>
+                    </div>
+                `;
+            }).join("");
+
+            Swal.fire({
+                title: "Entregues",
+                html: `<div style="max-height:300px; overflow-y:auto;">${html}</div>`,
+                confirmButtonColor:"#32A0CE",
+                didOpen: () => {
+                    const popup = Swal.getPopup();
+                    popup.querySelectorAll(".submission-card").forEach(card => {
+                        card.addEventListener("click", () => {
+                            const data = card.dataset.resultats ? JSON.parse(card.dataset.resultats) : {};
+                            const operacions = taskDiv.dataset.operacions ? JSON.parse(taskDiv.dataset.operacions) : [];
+
+                            const jaQualificada = data.Qualificacio !== null;
+
+                            const htmlOps = operacions.map((op, index) => {
+                                const key = "Resultat" + (index + 1);
+                                const resultat = data[key] ?? "-";
+
+                                return `
+                                    <div style="display:flex; justify-content:space-between; align-items:center;
+                                                padding:8px; border-bottom:1px solid #ccc;">
+                                        <div><strong>${op}</strong> → <span>${resultat}</span></div>
+                                        <div>
+                                            <input type="checkbox" class="correct-checkbox" data-index="${index}" ${jaQualificada ? "checked disabled" : ""}>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join("");
+
+                            Swal.fire({
+                                title: "Resultats alumne",
+                                html: `<div id="opsContainer" style="max-height:300px; overflow-y:auto; text-align:left;">${htmlOps}</div>`,
+                                confirmButtonText: jaQualificada ? "Tancar" : "Guardar puntuació",
+                                confirmButtonColor:"#32A0CE",
+                                allowOutsideClick:false,
+                                allowEscapeKey:false,
+                                preConfirm: () => {
+                                    if(jaQualificada) return null;
+                                    let puntuacio = 0;
+                                    Swal.getPopup().querySelectorAll(".correct-checkbox").forEach(cb => {
+                                        if(cb.checked) puntuacio += 1;
+                                    });
+                                    return puntuacio;
+                                }
+                            }).then(result => {
+                                if(!jaQualificada && result.isConfirmed){
+                                    const usuario = sessionStorage.getItem('usuario');
+                                    const usuarioJSON = JSON.parse(usuario)
+                                    const puntuacioFinal = {
+                                        "Qualificacio": result.value,
+                                        "Estat_tramesa": "Qualificada",
+                                        "Professor": usuarioJSON.id,
+                                    };
+                                    const tramesaId = card.dataset.tramesaId;
+
+                                    qualificarTasca(tramesaId, puntuacioFinal)
+                                    .then(() => {
+                                        Swal.fire({
+                                            title: "Puntuació guardada",
+                                            text: `L'alumne ha obtingut ${puntuacioFinal.Qualificacio}/10`,
+                                            icon: "success",
+                                            confirmButtonColor:"#32A0CE",
+                                            allowOutsideClick:false,
+                                            allowEscapeKey:false,
+                                        });
+                                        cargarTemas();
+                                    })
+                                    .catch(() => {
+                                        Swal.fire({
+                                            title: "Error",
+                                            text: "No s'ha pogut guardar la puntuació",
+                                            icon: "error",
+                                            confirmButtonColor:"#32A0CE",
+                                            allowOutsideClick:false,
+                                            allowEscapeKey:false,
+                                        });
+                                    });
+                                }
+                            });
+                        });
+                    });
+                },
+                allowOutsideClick:false,
+                allowEscapeKey:false,
+            });
+
+        } catch(err){
+            console.error(err);
+            Swal.fire({
+                title:"Error",
+                text:"Error obtenint les entregues",
+                icon:"error",
+                confirmButtonColor:"#32A0CE",
+                allowOutsideClick:false,
+                allowEscapeKey:false,
+            });
+        }
+    }
+});
+
+cargarTemas();
+</script>
+
+<div id="toolbar">
+    <a href="informes.html" id="informesLink">Informes</a>
+    <a href="tasques.html" id="tasquesLink">Tasques</a>
+</div>
+
+<div class="course-container">
+    <div class="course-title">
+        Tasques de Matemàtiques
+    </div>
+    <div id="topicsContainer"></div>
+    <div class="add-topic-container">
+        <button class="btn" id="addTopicBtn">+ Afegir tema</button>
+    </div>
+</div>
+
+</body>
+</html>

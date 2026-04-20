@@ -6,6 +6,7 @@ import { crearInforme } from "./services/api.js";
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
+let operadores;
 
 /* ======================================================
    CONFIG
@@ -28,12 +29,44 @@ function generateGameCode() {
   return code;
 }
 
-function generateOperations() {
+function generateOperations(operador) {
   let ops = [];
+  let divisionAceptada = false;
+  operadores = operador;
   for (let i = 0; i < 10; i++) {
-    const a = Math.floor(Math.random() * 20) + 1;
-    const b = Math.floor(Math.random() * 20) + 1;
-    ops.push({ question: `${a} + ${b}`, answer: a + b });
+    divisionAceptada = false
+    if (operadores=="random") {
+      const operadors = ["+", "-", "*", "/"];
+      operador = operadors[Math.floor(Math.random() * operadors.length)];
+    }
+    let a = Math.floor(Math.random() * 20) + 1;
+    let b = Math.floor(Math.random() * 20) + 1;
+    if (operador=="+") {
+      ops.push({ question: `${a} + ${b}`, answer: a + b });
+    }
+    else if (operador=="-") {
+      if (a >= b) {
+        ops.push({ question: `${a} - ${b}`, answer: a - b });
+      }
+      else {
+        ops.push({ question: `${b} - ${a}`, answer: b - a });
+      }
+    }
+    else if (operador=="*") {
+      ops.push({ question: `${a} X ${b}`, answer: a * b });
+    }
+    else {
+      while (!divisionAceptada) {
+        if (a%b==0) {
+          ops.push({ question: `${a} / ${b}`, answer: a / b });
+          divisionAceptada = true
+        }
+        else {
+          a = Math.floor(Math.random() * 20) + 1;
+          b = Math.floor(Math.random() * 20) + 1;
+        }
+      }
+    }
   }
   return ops;
 }
@@ -47,11 +80,12 @@ app.use(express.static("public"));
    ENDPOINT PARA OBTENER CÓDIGO
 ====================================================== */
 app.get("/game-code", (req, res) => {
+  const { operador } = req.query;
   const code = generateGameCode();
   games[code] = {
     code,
     participants: [],
-    operations: generateOperations(),
+    operations: generateOperations(operador),
     currentOperationIndex: -1,
     timer: null,
     remainingTime: timerDuration
@@ -266,9 +300,23 @@ io.on("connection", socket => {
       emitToGame(code, "update-players", game.participants);
     }
   });
-});
+
+  // =================== Chat ===================
+  socket.on("chat-message", ({ code, name, text }) => {
+    emitToGame(code, "chat-message", {
+      name,
+      text,
+      senderId: socket.id,
+      type: "player"
+    });
+  });
+
+  socket.on("toggle-chat", ({ code, activo }) => {
+    emitToGame(code, "chat-status", { activo })
+  });
+  });
 
 /* ======================================================
    START SERVER
 ====================================================== */
-server.listen(3000, () => console.log("✅ Servidor corriendo en http://localhost:3000"));
+server.listen(3000, '0.0.0.0', () => console.log("✅ Servidor corriendo en http://localhost:3000"));

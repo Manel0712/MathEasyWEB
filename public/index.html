@@ -23,6 +23,46 @@ body{
     margin:0;
 }
 
+#toolbar {
+    display: none; 
+    background-color: var(--fons-central);
+    padding: 10px 20px;
+    color: white;
+    position: fixed;
+    top: 0;
+    width: 100%;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    z-index: 1000;
+    align-items: center;
+}
+
+#toolbar a {
+    color: white;
+    text-decoration: none;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    gap: 4.5px;
+}
+
+#toolbar a:first-child {
+    margin-left: auto;
+}
+
+#toolbar a + a {
+    margin-left: 25px;
+}
+
+#toolbar a:last-child {
+    margin-right: 20px;
+}
+
+#toolbar a svg {
+    width: 20px;
+    height: 20px;
+    stroke: white;
+}
+
 .game-container{text-align:center;}
 
 .game-code{
@@ -33,12 +73,14 @@ body{
     border-radius:12px;
     margin-bottom:20px;
     letter-spacing:6px;
+    display:none;
 }
 
 .operation{
     font-size:48px;
     font-weight:bold;
     margin-bottom:20px;
+    display:none;
 }
 
 .timer{
@@ -47,7 +89,7 @@ body{
     display:none;
 }
 
-.start-btn, .next-btn{
+.start-btn, .next-btn, .create-btn{
     padding:12px 25px;
     font-size:18px;
     border:none;
@@ -56,6 +98,10 @@ body{
     color:white;
     cursor:pointer;
     margin:10px;
+}
+
+.start-btn{
+    display:none;
 }
 
 .next-btn{
@@ -174,10 +220,106 @@ body{
         transform: translateY(0px) scale(1);
     }
 }
+/* =================== Chat lateral =================== */
+.chat-container {
+    position: fixed;
+    bottom: 0;
+    right: -320px; /* oculto inicialmente */
+    width: 300px;
+    max-height: 400px;
+    background-color: white;
+    border-radius: 8px 8px 0 0;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    transition: right 0.3s ease;
+    z-index: 2000;
+}
+
+.chat-container.open {
+    right: 20px; /* se despliega */
+}
+
+.chat-header {
+    background-color: #32A0CE;
+    color: white;
+    padding: 10px;
+    cursor: pointer;
+    font-weight: bold;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.chat-messages {
+    flex: 1;
+    padding: 10px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.chat-message {
+    padding: 6px 10px;
+    border-radius: 8px;
+    max-width: 80%;
+    word-wrap: break-word;
+}
+
+.chat-message.self {
+    background: #32A0CE;
+    color: white;
+    align-self: flex-end;
+}
+
+.chat-message.player {
+    background: #f2f2f2;
+    color: black;
+    align-self: flex-start;
+}
+
+.chat-message.observer {
+    background: #dceef6;
+    color: black;
+    align-self: flex-start;
+}
+
+.chat-input-container {
+    display: flex;
+    border-top: 1px solid #ccc;
+    gap: 5px;
+}
+
+.chat-input-container input {
+    flex: 1;
+    min-width: 0;
+    padding: 6px 10px;
+    border: none;
+    outline: none;
+}
+
+.chat-input-container button {
+    background: #32A0CE;
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    cursor: pointer;
+    font-weight: bold;
+    white-space: nowrap;
+}
 </style>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
 
 <body>
+
+<div id="toolbar">
+
+    <a href="informes.html" id="informeLink">Informes</a>
+    <a href="tasques.html" id="tasquesLink">Tasques</a>
+
+</div>
 
 <div class="game-container">
 
@@ -191,6 +333,7 @@ body{
     <div class="timer" id="timer">00</div>
 
     <!-- Botones -->
+    <button class="create-btn" id="createBtn">Crear Partida</button>
     <button class="start-btn" id="startBtn">Iniciar Joc</button>
     <button class="next-btn" id="nextBtn">Següent Operació</button>
 
@@ -208,28 +351,432 @@ body{
 <!-- Socket.io -->
 <script src="/socket.io/socket.io.js"></script>
 
-<script>
+<script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+
+<script type="module">
+import { registrarProfessor } from "./services/api.js";
+import { loggin } from "./services/api.js";
+import { demanarCodiVerificacio } from "./services/api.js";
+import { verificarCodi } from "./services/api.js";
+document.addEventListener("DOMContentLoaded", function () {
+  const toolbar = document.querySelector('#toolbar');
+  const usuario = sessionStorage.getItem('usuario');
+
+  if (usuario) {
+    const icon = feather.icons['file-text'].toSvg();
+    informeLink.insertAdjacentHTML('afterbegin', icon);
+    const iconTasques = feather.icons['check-square'].toSvg();
+    tasquesLink.insertAdjacentHTML('afterbegin', iconTasques);
+    toolbar.style.display = 'flex';
+  } else {
+    abrirModal();
+  }
+});
+function abrirModal() {
+  Swal.fire({
+    title: 'Benvingut',
+    text: 'Selecciona una opció',
+    showDenyButton: true,
+    confirmButtonText: 'Iniciar Sessió',
+    confirmButtonColor: '#32A0CE',
+    denyButtonText: 'Registre',
+    denyButtonColor: '#32A0CE',
+    allowOutsideClick: false,
+    allowEscapeKey: false,
+    focusConfirm: false,
+    showLoaderOnConfirm: true,
+  }).then((result) => {
+    if (result.isConfirmed) {
+      mostrarLogin();
+    } else if (result.isDenied) {
+      mostrarRegistro();
+    }
+  });
+}
+
+function mostrarLogin() {
+  Swal.fire({
+    title: 'Iniciar Sesión',
+    html: `
+      <input id="email" type="email" class="swal2-input" placeholder="Email">
+      <input id="password" type="password" class="swal2-input" placeholder="Contrasenya">
+    `,
+    confirmButtonText: 'Entrar',
+    confirmButtonColor: '#32A0CE',
+    allowOutsideClick: false,
+    allowEscapeKey: false,
+    focusConfirm: false,
+    showLoaderOnConfirm: true,
+
+    preConfirm: () => {
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value.trim();
+
+      if (!email || !password) {
+        Swal.showValidationMessage('Tots els camps son obligatoris');
+        return false;
+      }
+
+      return loggin({ Email: email, Password: password })
+        .then((data) => {
+
+          const nom = data.professor.Nom
+          return demanarCodiVerificacio({ email })
+            .then(() => {
+
+              return Swal.fire({
+                title: 'Verificació per Email',
+                text: `Introdueix el codi de verificació que hem enviat al teu email`,
+                icon: null,
+                input: 'text',
+                inputPlaceholder: 'Codi',
+                confirmButtonText: 'Verificar',
+                confirmButtonColor: '#32A0CE',
+                showCancelButton: true,
+                cancelButtonText: 'Cancel·lar',
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                focusConfirm: false,
+                showLoaderOnConfirm: true,
+
+                preConfirm: (codigo) => {
+                  return verificarCodi({ email, codigo })
+                    .then(() => {
+                        Swal.fire({
+                            title: 'Loggin completat',
+                            text: `Benvingut ${nom}`,
+                            icon: 'success',
+                            iconColor: '#32A0CE',
+                            confirmButtonText: 'Aceptar',
+                            confirmButtonColor: '#32A0CE',
+                            allowOutsideClick: false,
+                            allowEscapeKey: false,
+                            focusConfirm: false,
+                        })
+                        const icon = feather.icons['file-text'].toSvg();
+                        informeLink.insertAdjacentHTML('afterbegin', icon);
+                        const iconTasques = feather.icons['check-square'].toSvg();
+                        tasquesLink.insertAdjacentHTML('afterbegin', iconTasques);
+                        const toolbar = document.querySelector('#toolbar');
+                        toolbar.style.display = 'flex';
+                        sessionStorage.setItem('usuario', JSON.stringify(data.professor));
+                    })
+                    .catch(err => {
+                      Swal.showValidationMessage(err.message);
+                      return false;
+                    });
+                },
+                didOpen: () => {
+                    const container = Swal.getHtmlContainer();
+                    const footer = Swal.getFooter();
+
+                    const msgDiv = document.createElement('div');
+                    msgDiv.classList.add('customValidationMsg');
+                    msgDiv.style.cssText = 'color:red; font-size:0.9em; margin-top:5px;';
+                    container.appendChild(msgDiv);
+
+                    const cancelBtn = Swal.getCancelButton();
+
+                    const btn = cancelBtn.cloneNode(true);
+                    btn.textContent = 'Nou codi';
+
+                    const confirmBtn = Swal.getConfirmButton();
+                    confirmBtn.parentNode.insertBefore(btn, confirmBtn.nextSibling);
+
+                    btn.addEventListener('click', async () => {
+                        demanarCodiVerificacio({
+                            email
+                        }).then(() => {
+                            msgDiv.style.color = 'green';
+                            msgDiv.textContent = 'S’ha enviat un nou codi al teu email';
+                            setTimeout(() => { msgDiv.textContent = ''; }, 3000);
+                        });
+                    });
+
+                    cancelBtn.style.display = 'none';
+                },
+              });
+
+            });
+
+        })
+        .catch(err => {
+          Swal.showValidationMessage(err.message);
+          return false;
+        });
+    }
+  });
+}
+
+function mostrarRegistro() {
+  Swal.fire({
+    title: 'Registro',
+    html: `
+      <p>Introdueix les teves dades per registrar-te</p>
+      <input id="nom" class="swal2-input" placeholder="Nom">
+      <input id="cognoms" class="swal2-input" placeholder="Cognoms">
+      <input id="emailReg" type="email" class="swal2-input" placeholder="Email">
+      <input id="pass1" type="password" class="swal2-input" placeholder="Contrasenya">
+      <input id="pass2" type="password" class="swal2-input" placeholder="Confirma la Contrasenya">
+      <input id="fecha" type="date" class="swal2-input">
+    `,
+    confirmButtonText: 'Registrar-se',
+    confirmButtonColor: '#32A0CE',
+    allowOutsideClick: false,
+    allowEscapeKey: false,
+    focusConfirm: false,
+    showLoaderOnConfirm: true,
+    preConfirm: async () => {
+
+      const nom = document.getElementById('nom').value.trim();
+      const cognoms = document.getElementById('cognoms').value.trim();
+      const email = document.getElementById('emailReg').value.trim();
+      const pass1 = document.getElementById('pass1').value.trim();
+      const pass2 = document.getElementById('pass2').value.trim();
+      const fecha = document.getElementById('fecha').value;
+
+      if (!nom || !cognoms || !email || !pass1 || !pass2 || !fecha) {
+        Swal.showValidationMessage('Tots els camps son obligatoris');
+        return false;
+      }
+
+      if (pass1 !== pass2) {
+        Swal.showValidationMessage('Les contrasenyes no coincideixen');
+        return false;
+      }
+
+      // Validar mayoría de edad
+      const hoy = new Date();
+      const nacimiento = new Date(fecha);
+      let edad = hoy.getFullYear() - nacimiento.getFullYear();
+      const mes = hoy.getMonth() - nacimiento.getMonth();
+
+      if (mes < 0 || (mes === 0 && hoy.getDate() < nacimiento.getDate())) {
+        edad--;
+      }
+
+      if (edad < 18) {
+        Swal.showValidationMessage('Has de ser més gran de 18 anys');
+        return false;
+      }
+
+      return { nom, cognoms, email, pass1, fecha };
+
+    }
+  }).then((result) => {
+    if (result.isConfirmed) {
+      demanarCodiVerificacio({
+        email: result.value.email
+      }).then(() => {
+        Swal.fire({
+            title: 'Verificació per Email',
+            text: `Introdueix el codi de verificació que hem enviat al teu email`,
+            icon: null,
+            input: 'text',
+            inputPlaceholder: 'Codi',
+            confirmButtonText: 'Verificar',
+            confirmButtonColor: '#32A0CE',
+            showCancelButton: true,
+            cancelButtonText: 'Cancel·lar',
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            focusConfirm: false,
+            showLoaderOnConfirm: true,
+            preConfirm: (codigo) => {
+                return verificarCodi({
+                    email: result.value.email,
+                    codigo
+                }).then(() => {
+                    return registrarProfessor({
+                        Nom: result.value.nom,
+                        Cognoms: result.value.cognoms,
+                        Email: result.value.email,
+                        Password: result.value.pass1,
+                        Data_Naixement: result.value.fecha
+                    }).then((data) => {
+                        Swal.fire({
+                            title: 'Registre completat',
+                            text: `Usuari registrat correctament`,
+                            icon: 'success',
+                            iconColor: '#32A0CE',
+                            confirmButtonText: 'Aceptar',
+                            confirmButtonColor: '#32A0CE',
+                            allowOutsideClick: false,
+                            allowEscapeKey: false,
+                            focusConfirm: false,
+                        })
+                        const icon = feather.icons['file-text'].toSvg();
+                        informeLink.insertAdjacentHTML('afterbegin', icon);
+                        const iconTasques = feather.icons['check-square'].toSvg();
+                        tasquesLink.insertAdjacentHTML('afterbegin', iconTasques);
+                        const toolbar = document.querySelector('#toolbar');
+                        toolbar.style.display = 'flex';
+                        console.log(data);
+                        sessionStorage.setItem('usuario', JSON.stringify(data));
+                    }).catch(err => {
+                        Swal.showValidationMessage(err.message);
+                        return false;
+                    });
+                }).catch(err => {
+                    Swal.showValidationMessage(err.message);
+                    return false;
+                });
+            },
+            didOpen: () => {
+                const container = Swal.getHtmlContainer();
+                const footer = Swal.getFooter();
+
+                const msgDiv = document.createElement('div');
+                msgDiv.classList.add('customValidationMsg');
+                msgDiv.style.cssText = 'color:red; font-size:0.9em; margin-top:5px;';
+                container.appendChild(msgDiv);
+
+                const cancelBtn = Swal.getCancelButton();
+
+                const btn = cancelBtn.cloneNode(true);
+                btn.textContent = 'Nou codi';
+
+                const confirmBtn = Swal.getConfirmButton();
+                confirmBtn.parentNode.insertBefore(btn, confirmBtn.nextSibling);
+
+                btn.addEventListener('click', async () => {
+                    demanarCodiVerificacio({
+                        email
+                    }).then(() => {
+                        msgDiv.style.color = 'green';
+                        msgDiv.textContent = 'S’ha enviat un nou codi al teu email';
+                        setTimeout(() => { msgDiv.textContent = ''; }, 3000);
+                    });
+                });
+
+                cancelBtn.style.display = 'none';
+            }
+        });
+      })
+    }
+  });
+}
 const socket = io();
 const gameCodeDiv = document.getElementById("gameCode");
 const operationDiv = document.getElementById("operation");
 const timerDiv = document.getElementById("timer");
+const createBtn = document.querySelector("#createBtn");
 const startBtn = document.getElementById("startBtn");
 const nextBtn = document.getElementById("nextBtn");
 const playersContainer = document.getElementById("players");
 const podiumDiv = document.getElementById("podium");
+const toggleChatBtn = document.getElementById("toggleChatBtn");
 
 let currentGameCode = null;
 
+const chatContainer = document.getElementById("chatContainer");
+const chatOpenBtn = document.getElementById("chatOpenBtn");
+const chatClose = document.getElementById("chatClose");
+const chatMessages = document.getElementById("chatMessages");
+const chatInput = document.getElementById("chatInput");
+const chatSend = document.getElementById("chatSend");
+
+let currentUserName = "Observador";
+let chatActivo = true;
+
+// Función para alternar chat
+function toggleChat() {
+    chatContainer.classList.toggle("open");
+}
+
+// Abrir chat con botón flotante
+chatOpenBtn.addEventListener("click", toggleChat);
+
+// Cerrar chat con la X
+chatClose.addEventListener("click", toggleChat);
+
+// Función para añadir mensajes
+function appendMessage({ name, text, type, self }) {
+    const div = document.createElement("div");
+    div.classList.add("chat-message");
+    if(self) div.classList.add("self");
+    else div.classList.add(type);
+    div.textContent = `${name}: ${text}`;
+    chatMessages.appendChild(div);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+// Enviar mensaje
+chatSend.addEventListener("click", () => {
+    if (!chatActivo) {
+        Swal.fire("Chat desactivado", "El profesor ha bloqueado el chat", "warning");
+        return;
+    }
+    const text = chatInput.value.trim();
+    if(!text || !currentGameCode) return;
+    const usuario = sessionStorage.getItem('usuario');
+    const usuarioJSON = JSON.parse(usuario)
+    currentUserName = usuarioJSON.Nom + " " + usuarioJSON.Cognoms
+    appendMessage({ name: usuarioJSON.Nom + " " + usuarioJSON.Cognoms, text, type:"player", self:true });
+    // Aquí puedes emitir por socket
+    socket.emit("chat-message", { code: currentGameCode, name: currentUserName, text });
+    chatInput.value = "";
+});
+
+toggleChatBtn.addEventListener("click", () => {
+    chatActivo = !chatActivo;
+
+    toggleChatBtn.textContent = chatActivo ? "Parar Chat" : "Activar Chat";
+
+    // Avisar a todos los clientes
+    socket.emit("toggle-chat", {
+        code: currentGameCode,
+        activo: chatActivo
+    });
+});
+
+// Enviar mensaje con Enter
+chatInput.addEventListener("keydown", e => {
+    if(e.key === "Enter") chatSend.click();
+});
+
+// Recibir mensaje del servidor
+socket.on("chat-message", ({ name, text, type, senderId }) => {
+    if (senderId === socket.id) return;
+    appendMessage({ name, text, type, self:false });
+});
+
+socket.on("chat-status", ({ activo }) => {
+    chatActivo = activo;
+
+    if (!chatActivo) {
+        chatInput.disabled = true;
+        chatSend.disabled = true;
+
+        appendMessage({
+            name: "Sistema",
+            text: "El chat ha sido desactivado por el profesor",
+            type: "observer",
+            self: false
+        });
+    } else {
+        chatInput.disabled = false;
+        chatSend.disabled = false;
+
+        appendMessage({
+            name: "Sistema",
+            text: "El chat ha sido activado",
+            type: "observer",
+            self: false
+        });
+    }
+});
+
 // =================== Obtener código de partida ===================
-window.onload = async () => {
-    const res = await fetch("/game-code");
+const partidaCreated = async (operador) => {
+    const res = await fetch(`/game-code?operador=${encodeURIComponent(operador)}`);
     const data = await res.json();
     currentGameCode = data.code;
     gameCodeDiv.textContent = currentGameCode;
 
     // =================== OBSERVAR PARTIDA ===================
     socket.emit("observe-game", { code: currentGameCode });
-};
+}
 
 // =================== Eventos ===================
 socket.on("update-players", participants => {
@@ -309,6 +856,82 @@ socket.on("show-podium", participants => {
 });
 
 // =================== Botones ===================
+createBtn.addEventListener("click", () => {
+    let operador;
+    Swal.fire({
+    title: 'Selecciona operador',
+    html: `
+        <div style="display:flex; gap:15px; justify-content:center; flex-wrap:wrap;">
+        
+        <div class="card-op" data-op="+" >+</div>
+        <div class="card-op" data-op="-" >−</div>
+        <div class="card-op" data-op="*" >×</div>
+        <div class="card-op" data-op="/" >÷</div>
+        <div class="card-op" data-op="random">🎲</div>
+
+        </div>
+
+        <style>
+        .card-op {
+            width:70px;
+            height:70px;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            font-size:28px;
+            border:2px solid #ccc;
+            border-radius:12px;
+            cursor:pointer;
+            transition:0.2s;
+        }
+
+        .card-op:hover {
+            transform:scale(1.05);
+        }
+
+        .card-selected {
+            border:3px solid #32A0CE !important;
+        }
+        </style>
+    `,
+    confirmButtonText: 'Començar',
+    confirmButtonColor: '#32A0CE',
+    allowOutsideClick: false,
+    allowEscapeKey: false,
+    focusConfirm: false,
+    showLoaderOnConfirm: true,
+    didOpen: () => {
+        const cards = document.querySelectorAll('.card-op');
+
+        cards.forEach(card => {
+            card.addEventListener('click', () => {
+                cards.forEach(c => c.classList.remove('card-selected'));
+
+                card.classList.add('card-selected');
+
+                operador = card.dataset.op;
+            });
+        });
+    }
+    }).then((result) => {
+        if (result.isConfirmed) {
+            if (!operador) {
+                Swal.showValidationMessage("Selecciona un operador");
+                return;
+            }
+
+            partidaCreated(operador);
+
+            Swal.close();
+
+            gameCodeDiv.style.display = "block"
+            operationDiv.style.display = "block"
+            createBtn.style.display = "none";
+            startBtn.style.display = "inline-block"
+        }
+    });
+})
+
 startBtn.addEventListener("click", () => {
     if(!currentGameCode) return alert("Código no cargado");
     socket.emit("start-game", currentGameCode);
@@ -370,6 +993,28 @@ function playGameMusic(){
 }
 
 </script>
+
+<div id="chatContainer" class="chat-container">
+    <div id="chatHeader" class="chat-header">
+        Chat 
+        <div style="display:flex; gap:10px;">
+            <button id="toggleChatBtn" style="background:white;color:#32A0CE;border:none;padding:5px 10px;border-radius:6px;cursor:pointer;">
+                Parar Chat
+            </button>
+            <span id="chatClose" style="cursor:pointer;">✕</span>
+        </div>
+    </div>
+    <div id="chatMessages" class="chat-messages"></div>
+    <div id="chatInputContainer" class="chat-input-container">
+        <input type="text" id="chatInput" placeholder="Escribe un mensaje...">
+        <button id="chatSend">Enviar</button>
+    </div>
+</div>
+
+<!-- Botón flotante para abrir chat -->
+<button id="chatOpenBtn" style="position:fixed;bottom:20px;right:20px;padding:10px 15px;border:none;border-radius:8px;background:white;color:#32A0CE;cursor:pointer;z-index:1500;">
+    Chat
+</button>
 
 </body>
 </html>

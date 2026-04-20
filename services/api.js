@@ -3,7 +3,7 @@ import fetch from 'node-fetch';
 const token = "Ap3wO8b4mJzkap05MbNMzgtaBxqTUyYHuYbmQDxH7f9f5913";
 
 export const crearInforme = (report) => {
-    fetch('http://192.168.1.41:8000/api/informes', {
+    fetch('http://localhost:8000/api/informes', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',

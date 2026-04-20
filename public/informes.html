@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Informes</title>
+<style>
+  :root {
+    --bg-page: #32A0CE;
+    --card-bg: #ffffff;
+    --card-gap: 20px;
+    --card-padding: 20px;
+    --card-border-radius: 10px;
+    --text-color: #000000;
+    --icon-color: #32A0CE;
+    --card-width: 600px; /* ancho de cada tarjeta */
+  }
+
+  body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background-color: var(--bg-page);
+    display: flex;
+    justify-content: center;
+    padding: 40px;
+    gap: 40px;
+  }
+
+  .container {
+    display: flex;
+    flex-direction: column;
+    gap: var(--card-gap);
+  }
+
+  .card {
+    background-color: var(--card-bg);
+    padding: var(--card-padding);
+    border-radius: var(--card-border-radius);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    width: var(--card-width);
+  }
+
+  .card-info {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-size: 16px;
+    color: var(--text-color);
+  }
+
+  .card-info span {
+    display: flex;
+    justify-content: space-between;
+    min-width: 300px;
+  }
+
+  .card-info strong {
+    margin-right: 10px;
+  }
+
+  .card-icon {
+    width: 60px;
+    height: 60px;
+  }
+
+  .card-icon svg {
+    width: 100%;
+    height: 100%;
+    stroke: var(--icon-color);
+    fill: var(--icon-color);
+  }
+
+  .filters {
+    background: white;
+    padding: 20px;
+    border-radius: 10px;
+    width: 250px;
+    height: fit-content;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  }
+
+  .filter-group {
+    margin-bottom: 20px;
+  }
+
+  .filter-option {
+    padding: 6px 10px;
+    margin: 4px 0;
+    border-radius: 6px;
+    cursor: pointer;
+    background: #f2f2f2;
+    transition: 0.2s;
+  }
+
+  .filter-option:hover {
+    background: #dceef6;
+  }
+
+  .filter-active {
+    background: #32A0CE;
+    color: white;
+  }
+
+  .accordion {
+    cursor: pointer;
+    user-select: none;
+    margin: 0;
+    padding: 6px 0;
+  }
+
+  .panel {
+    max-height: 500px;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+  }
+</style>
+</head>
+<body>
+
+<div class="filters">
+  <h3>Filtres</h3>
+
+  <button id="limpiar-filtros" style="margin-bottom:10px; cursor:pointer;">🔄 Limpiar filtros</button>
+
+  <div class="filter-group">
+    <h4 class="accordion">Tipus de partida ▴</h4>
+    <div id="filter-tipus" class="panel"></div>
+  </div>
+
+  <div class="filter-group">
+    <h4 class="accordion">Jugador ▴</h4>
+    <div id="filter-jugador" class="panel"></div>
+  </div>
+
+  <div id="contador" style="margin-top:20px; font-weight:bold;"></div>
+</div>
+
+<div class="container">
+  <!-- Las tarjetas se generarán dinámicamente aquí -->
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+</script>
+
+<script type="module">
+  import { informes } from "./services/api.js";
+  let informesData = [];
+  let filtroTipus = null;
+  let filtroJugador = null;
+  // Función para obtener datos de la API
+  function obtenerInformes() {
+      informes().then(informes => {
+
+      informesData = informes;
+      generarFiltros();
+      renderCards();
+
+      const container = document.querySelector('.container');
+      container.innerHTML = ''; // Limpiar antes de agregar
+
+      informes.forEach(informe => {
+        // Crear la tarjeta
+        const card = document.createElement('div');
+        card.classList.add('card');
+
+        // Crear la sección de info
+        const cardInfo = document.createElement('div');
+        cardInfo.classList.add('card-info');
+
+        // Añadir los datos dinámicamente
+        const campos = [
+          { label: 'Tipus de partida', value: informe.Tipus_partida },
+          { label: 'Respostes correctes', value: informe.Respostes_correctes },
+          { label: 'Respostes incorrectes', value: informe.Respostes_incorrectes },
+          { label: 'Experiencia', value: informe.Experiencia },
+          { label: 'Alumne', value: informe.nombre_completo },
+        ];
+
+        campos.forEach(campo => {
+          const span = document.createElement('span');
+          span.innerHTML = `<strong>${campo.label}</strong> <span>${campo.value}</span>`;
+          cardInfo.appendChild(span);
+        });
+
+        // Crear el icono (SVG)
+        const cardIcon = document.createElement('div');
+        cardIcon.classList.add('card-icon');
+        cardIcon.innerHTML = `<img src="icono_impresora.png" alt="Icono" style="width:100%; height:100%;">`;
+        cardIcon.addEventListener('click', () => {
+            imprimirCardView({
+                tipus: informe.Tipus_partida,
+                correctes: informe.Respostes_correctes,
+                incorrectes: informe.Respostes_incorrectes,
+                experiencia: informe.Experiencia,
+                alumno: informe.nombre_completo
+            });
+        });
+
+        // Añadir info e icono a la tarjeta
+        card.appendChild(cardInfo);
+        card.appendChild(cardIcon);
+
+        // Añadir la tarjeta al contenedor
+        container.appendChild(card);
+      });
+    }).catch(error => {
+      console.error('Error al obtener los informes:', error);
+    });
+  }
+
+  // Llamamos a la función al cargar la página
+  obtenerInformes();
+
+  function imprimirCardView({ tipus, correctes, incorrectes, experiencia, alumno }) {
+      const { jsPDF } = window.jspdf;
+
+      const doc = new jsPDF({
+          unit: "pt",
+          format: "a4"
+      });
+
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const margin = 50;
+
+      const logo = new Image();
+      logo.src = '_89_7.png';
+
+      logo.onload = () => {
+
+          // ================= HEADER =================
+          doc.setFillColor(50, 160, 206);
+          doc.rect(0, 0, pageWidth, 120, 'F');
+
+          doc.addImage(logo, 'PNG', margin, 20, 120, 80);
+
+          doc.setTextColor(255, 255, 255);
+          doc.setFontSize(24);
+          doc.setFont(undefined, 'bold');
+          doc.text("INFORME DE RENDIMENT", margin + 150, 70);
+
+          doc.setFontSize(14);
+          doc.setFont(undefined, 'normal');
+          doc.text("Resum acadèmic de l'alumne", margin + 150, 95);
+
+          // ================= CONTENT =================
+          let y = 180;
+
+          function drawRow(label, value) {
+              doc.setTextColor(38, 50, 56);
+              doc.setFont(undefined, 'bold');
+              doc.text(label, margin, y);
+
+              doc.setFont(undefined, 'normal');
+              doc.setTextColor(84, 110, 122);
+              doc.text(value, margin + 260, y);
+
+              y += 32;
+          }
+
+          drawRow("Tipus de partida:", tipus);
+          drawRow("Respostes correctes:", correctes.toString());
+          drawRow("Respostes incorrectes:", incorrectes.toString());
+          drawRow("Experiencia obtinguda:", `${experiencia} XP`);
+          drawRow("Alumne:", alumno);
+
+          // ================= FOOTER LINE =================
+          doc.setDrawColor(21, 101, 192);
+          doc.line(margin, 800, pageWidth - margin, 800);
+
+          doc.setFontSize(10);
+          doc.setTextColor(128);
+          doc.text("Document generat automáticament per MathEasy", pageWidth / 2, 820, { align: "center" });
+
+          doc.setFontSize(16);
+          doc.setTextColor(21, 101, 206);
+          doc.text("MathEasy®", pageWidth / 2, 840, { align: "center" });
+
+          doc.setFontSize(11);
+          doc.text("Departament Acadèmic MathEasy", pageWidth / 2, 860, { align: "center" });
+
+          // ================= PLATFORM DETECTION =================
+          const isAndroid = window.Android && Android.downloadBase64File;
+
+          if (isAndroid) {
+
+              // 🤖 ANDROID → PNG REAL (render PDF to canvas)
+              const pdfBlob = doc.output("blob");
+              const reader = new FileReader();
+
+              reader.onload = function () {
+
+                  const pdfDataUrl = reader.result;
+
+                  const loadingTask = pdfjsLib.getDocument({ data: atob(pdfDataUrl.split(',')[1]) });
+
+                  loadingTask.promise.then(async (pdf) => {
+
+                      const page = await pdf.getPage(1);
+                      const scale = 3;
+                      const viewport = page.getViewport({ scale });
+
+                      const canvas = document.createElement("canvas");
+                      const context = canvas.getContext("2d");
+
+                      canvas.width = viewport.width;
+                      canvas.height = viewport.height;
+
+                      const renderContext = {
+                          canvasContext: context,
+                          viewport: viewport
+                      };
+
+                      await page.render(renderContext).promise;
+
+                      const imgData = canvas.toDataURL("image/png");
+
+                      Android.downloadBase64File(
+                          imgData,
+                          `informe_${alumno}.png`
+                      );
+
+                      if (Android.openPdf) {
+                          setTimeout(() => Android.openPdf(), 500);
+                      }
+                  });
+              };
+
+              reader.readAsDataURL(pdfBlob);
+
+          } else {
+
+              // 🌐 WEB → PDF NORMAL
+              doc.save(`informe_${alumno}.pdf`);
+          }
+      };
+  }
+    function generarFiltros() {
+      const tiposUnicos = [...new Set(informesData.map(i => i.Tipus_partida))];
+      const jugadoresUnicos = [...new Set(informesData.map(i => i.nombre_completo))];
+
+      const tipoContainer = document.getElementById("filter-tipus");
+      const jugadorContainer = document.getElementById("filter-jugador");
+
+      tipoContainer.innerHTML = "";
+      jugadorContainer.innerHTML = "";
+
+      tiposUnicos.forEach(tipo => {
+        const div = document.createElement("div");
+        div.className = "filter-option";
+        div.textContent = tipo;
+
+        div.onclick = () => {
+          filtroTipus = filtroTipus === tipo ? null : tipo;
+          actualizarFiltrosUI();
+          renderCards();
+        };
+
+        tipoContainer.appendChild(div);
+      });
+
+      jugadoresUnicos.forEach(jugador => {
+        const div = document.createElement("div");
+        div.className = "filter-option";
+        div.textContent = jugador;
+
+        div.onclick = () => {
+          filtroJugador = filtroJugador === jugador ? null : jugador;
+          actualizarFiltrosUI();
+          renderCards();
+        };
+
+        jugadorContainer.appendChild(div);
+      });
+    }
+
+    function actualizarFiltrosUI() {
+      document.querySelectorAll("#filter-tipus .filter-option").forEach(el => {
+        el.classList.toggle("filter-active", el.textContent === filtroTipus);
+      });
+
+      document.querySelectorAll("#filter-jugador .filter-option").forEach(el => {
+        el.classList.toggle("filter-active", el.textContent === filtroJugador);
+      });
+    }
+
+    function renderCards() {
+      const container = document.querySelector('.container');
+      container.innerHTML = '';
+
+      let filtrados = informesData.filter(i => {
+        const cumpleTipus = !filtroTipus || i.Tipus_partida === filtroTipus;
+        const cumpleJugador = !filtroJugador || i.nombre_completo === filtroJugador;
+        return cumpleTipus && cumpleJugador;
+      });
+
+      actualizarContador(filtrados);
+
+      filtrados.forEach(informe => {
+        // Crear la tarjeta
+        const card = document.createElement('div');
+        card.classList.add('card');
+
+        // Crear la sección de info
+        const cardInfo = document.createElement('div');
+        cardInfo.classList.add('card-info');
+
+        // Añadir los datos dinámicamente
+        const campos = [
+          { label: 'Tipus de partida', value: informe.Tipus_partida },
+          { label: 'Respostes correctes', value: informe.Respostes_correctes },
+          { label: 'Respostes incorrectes', value: informe.Respostes_incorrectes },
+          { label: 'Experiencia', value: informe.Experiencia },
+          { label: 'Alumne', value: informe.nombre_completo },
+        ];
+
+        campos.forEach(campo => {
+          const span = document.createElement('span');
+          span.innerHTML = `<strong>${campo.label}</strong> <span>${campo.value}</span>`;
+          cardInfo.appendChild(span);
+        });
+
+        // Crear el icono (SVG)
+        const cardIcon = document.createElement('div');
+        cardIcon.classList.add('card-icon');
+        cardIcon.innerHTML = `<img src="icono_impresora.png" alt="Icono" style="width:100%; height:100%;">`;
+        cardIcon.addEventListener('click', () => {
+            imprimirCardView({
+                tipus: informe.Tipus_partida,
+                correctes: informe.Respostes_correctes,
+                incorrectes: informe.Respostes_incorrectes,
+                experiencia: informe.Experiencia,
+                alumno: informe.nombre_completo
+            });
+        });
+
+        // Añadir info e icono a la tarjeta
+        card.appendChild(cardInfo);
+        card.appendChild(cardIcon);
+
+        // Añadir la tarjeta al contenedor
+        container.appendChild(card);
+      });
+    }
+
+    document.querySelectorAll(".accordion").forEach(acc => {
+      acc.addEventListener("click", () => {
+        const panel = acc.nextElementSibling;
+        const computedHeight = window.getComputedStyle(panel).maxHeight;
+        if (computedHeight !== "0px") {
+          panel.style.maxHeight = "0px";
+          acc.textContent = acc.textContent.replace("▴", "▾");
+        } else {
+          panel.style.maxHeight = panel.scrollHeight + "px";
+          acc.textContent = acc.textContent.replace("▾", "▴");
+        }
+      });
+    });
+
+    document.getElementById("limpiar-filtros").addEventListener("click", () => {
+      filtroTipus = null;
+      filtroJugador = null;
+      actualizarFiltrosUI();
+      renderCards();
+    });
+
+    function actualizarContador(filtrados) {
+      const cont = document.getElementById("contador");
+      cont.textContent = `Mostrant ${filtrados.length} de ${informesData.length} informes`;
+    }
+</script>
+
+</body>
+</html>
